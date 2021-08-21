@@ -38,7 +38,7 @@ function createRenderConfig(isDev) {
       path: path.join(__dirname, "dist"),
       publicPath: isDev ? "/" : undefined,
       clean: {
-        keep: /\.(?:exe|dll|json)$|(?:9c_Data|MonoBleedingEdge|publish)[\\\/]/
+        keep: /(?:9c)$|\.(?:exe|dll|json|9c|debug|so)$|(?:9c_Data|MonoBleedingEdge|publish)[\\\/]/
       }
     },
 
