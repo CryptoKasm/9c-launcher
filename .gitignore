@@ -3,6 +3,8 @@ dist
 pack
 .DS_Store
 .blockstore
+package-lock.json
+.github/examples
 
 # ignore generated file by graphql-code-generator.
 src/generated
@@ -15,3 +17,9 @@ __tests__/fixture/store/integration
 
 # Webpack bundle analyzer
 report.html
+
+# OS Packages
+deb
+
+# CryptoKasm
+Private
