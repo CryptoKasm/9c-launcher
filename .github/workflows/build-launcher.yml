@@ -29,6 +29,8 @@ jobs:
           echo "COMMIT=${{ github.sha }}" >> $GITHUB_ENV
           echo "BUILD_TARGET=linux-x64" >> $GITHUB_ENV
           echo "DOCKER_IMAGE_TAG=${{ matrix.unityVersion }}-linux-il2cpp-0.11" >> $GITHUB_ENV
+          date=$(date +"%m-%d-%y_%H-%M-%S")
+          echo "ZIPNAME="9c-launcher_$date"" >> $GITHUB_ENV
 
       - name: Checkout
         uses: actions/checkout@v2
@@ -66,8 +68,15 @@ jobs:
           ls -R ${{ github.workspace }}/dist 
           ls -R ${{ github.workspace }}/pack
 
+      - name: Zip build
+        run: |
+          sudo apt update &> /dev/null
+          sudo apt install zip -y &> /dev/null
+          cd ${{ github.workspace }}/pack/Nine\ Chronicles-linux-x64/
+          zip -r ${{ github.workspace }}/${{ env.ZIPNAME }}.zip ./*
+
       - uses: actions/upload-artifact@v2
         with:
-          name: 9c-launcher-${{ matrix.targetPlatform }}-${{ github.sha }}
-          path: ${{ github.workspace }}/pack/Nine Chronicles-linux-x64/**/*
+          name: 9c-launcher-${{ matrix.targetPlatform }}
+          path: ${{ github.workspace }}/${{ env.ZIPNAME }}.zip
           retention-days: 1
