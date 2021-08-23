@@ -22,8 +22,23 @@ buildDir="./NineChronicles/nekoyume/Build"
 editorDir="$HOME/Unity/Hub/Editor"
 unity="$editorDir/2020.3.4f1/Editor/Unity"
 
-if [ -d $buildDir ]; then
+if [ "$buildTarget" == "--mac" ]; then
+  buildTarget="MacOS"
+elif [ "$buildTarget" == "--linux" ]; then
+  buildTarget="Linux"
+fi
+
+currentBuild="$buildDir/$buildTarget"
+
+if [ -d $currentBuild ]; then
     echo "Found unity build"
+    
+    if [ ! -d ./dist ]; then
+      mkdir ./dist
+    fi
+
+    cp -vR $currentBuild/* ./dist/
+
     exit 0
 fi
 
@@ -36,17 +51,7 @@ elif [ ! -x "$unity" ]; then
   exit 1
 fi
 
-if [ "$buildTarget" == "--mac" ]; then
-  buildTarget="MacOS"
-elif [ "$buildTarget" == "--linux" ]; then
-  buildTarget="Linux"
-fi
-
-currentBuild="$buildDir/$buildTarget"
-
 #-----------------------------
-
-# rm -rf $currentBuild
 
 cd NineChronicles
 git config core.hooksPath hooks
