@@ -20,7 +20,6 @@ jobs:
         id: download-build-package
         uses: actions/download-artifact@v2
         with:
-          name: 9c-launcher-Linux-${{ github.sha }}
           path: ${{ github.workspace }}/artifact
 
       - name: Display Artifact
