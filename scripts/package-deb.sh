@@ -291,7 +291,6 @@ function generatePostRm() {
     cat <<EOF >>$packageWorkspace/DEBIAN/postrm
 #Remove remaining files
 sudo rm -rf /opt/planetarium
-sudo unlink /usr/local/bin/nine-chronicles
 sudo rm -rf /home/\$USER/.local/share/planetarium
 EOF
 }
