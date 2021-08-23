@@ -59,16 +59,15 @@ jobs:
             $projectWorkspace/scripts/build-player.sh ${{ matrix.targetPlatform }}
 
       - name: Build launcher
-        run: npm run package-all
+        run: npm run pack-all
 
       - name: Display various build directories
         run: |
           ls -R ${{ github.workspace }}/dist 
           ls -R ${{ github.workspace }}/pack
-          ls -R ${{ github.workspace }}/deb
 
       - uses: actions/upload-artifact@v2
         with:
           name: 9c-launcher-${{ matrix.targetPlatform }}-${{ github.sha }}
-          path: ${{ github.workspace }}/deb/*.deb
+          path: ${{ github.workspace }}/pack/Nine Chronicles-linux-x64/**/*
           retention-days: 1
