@@ -1,0 +1,82 @@
+on: 
+  push:
+    branches:
+      - main
+      - linux-dev
+  workflow_dispatch: []
+
+name: Build launcher
+
+jobs:
+  build-launcher-Linux:
+    name: build-launcher-${{ matrix.targetPlatform }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet-version: 
+          - 3.1.x
+        projectPath:
+          - NineChronicles/nekoyume
+        unityVersion:
+          - 2020.3.4f1
+        targetPlatform:
+          - Linux
+    steps:
+      - name: Set environment variables
+        run: |
+          echo "projectWorkspace="${{ github.workspace }}/NineChronicles"" >> $GITHUB_ENV
+          echo "COMMIT=${{ github.sha }}" >> $GITHUB_ENV
+          echo "BUILD_TARGET=linux-x64" >> $GITHUB_ENV
+          echo "DOCKER_IMAGE_TAG=${{ matrix.unityVersion }}-linux-il2cpp-0.11" >> $GITHUB_ENV
+          date=$(date +"%m-%d-%y_%H-%M-%S")
+          echo "ZIPNAME="9c-launcher_$date"" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          lfs: true
+          submodules: recursive
+
+      - name: Setup .NET Core SDK ${{ matrix.dotnet-version }}
+        uses: actions/setup-dotnet@v1.7.2
+        with:
+          dotnet-version: ${{ matrix.dotnet-version }}
+
+      - name: Setting up Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: "14"
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Unity Player using docker
+        run: |
+          docker run \
+            --env ULF="${{ secrets.UNITY_LICENSE }}" \
+            -w "$projectWorkspace" \
+            -v "$projectWorkspace":"$projectWorkspace" \
+            unityci/editor:${DOCKER_IMAGE_TAG} \
+            $projectWorkspace/scripts/build-player.sh ${{ matrix.targetPlatform }}
+
+      - name: Build launcher
+        run: npm run pack-all
+
+      - name: Display various build directories
+        run: |
+          ls -R ${{ github.workspace }}/dist 
+          ls -R ${{ github.workspace }}/pack
+
+      - name: Zip build
+        run: |
+          sudo apt update &> /dev/null
+          sudo apt install zip -y &> /dev/null
+          cd ${{ github.workspace }}/pack/Nine\ Chronicles-linux-x64/
+          zip -r ${{ github.workspace }}/${{ env.ZIPNAME }}.zip ./*
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: 9c-launcher-${{ matrix.targetPlatform }}
+          path: ${{ github.workspace }}/${{ env.ZIPNAME }}.zip
+          retention-days: 1

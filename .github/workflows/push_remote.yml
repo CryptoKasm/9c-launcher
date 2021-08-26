@@ -1,0 +1,45 @@
+on:  
+  workflow_dispatch:  # click the button on Github repo!
+
+name: Push build to remote server
+jobs:
+  push-remote-Linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set Environment Variables
+        run: |
+          date=$(date +"%m-%d-%y_%H-%M-%S")
+          echo "DIRNAME="9c-launcher_$date"" >> $GITHUB_ENV
+      
+      - name: Show Environmental Variables
+        run: |
+          echo 'DIRNAME: ${{ env.DIRNAME }}'
+
+      - name: Download artifacts
+        id: download-artifacts
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          github_token: ${{secrets.GITHUB_TOKEN}}
+          workflow: build-launcher.yml
+          workflow_conclusion: success
+          name: 9c-launcher-Linux
+          path: ${{ github.workspace }}/artifact
+
+      - name: Display Artifact
+        run: |
+          sudo chmod -R 777 ${{ github.workspace }}/artifact
+          ls -R ${{ github.workspace }}
+
+      - name: Push package to remote via ssh
+        id: push-package-remote
+        if: steps.download-artifacts.outcome  == 'success'
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.KOSMIC_HOST }}
+          port: ${{ secrets.KOSMIC_PORT }}
+          username: ${{ secrets.KOSMIC_USERNAME }}
+          password: ${{ secrets.KOSMIC_PASSWORD }}
+          source: "artifact/*.zip"
+          target: "/var/www/build/uploads"
+          strip_components: 1
