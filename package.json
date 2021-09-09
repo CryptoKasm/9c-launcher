@@ -61,7 +61,9 @@
     "storybook": "start-storybook -p 6006",
     "build-storybook": "build-storybook",
     "clean": "run-script-os",
-    "clean:linux": "scripts/clean.sh",
+    "clean:linux": "scripts/clean.sh --clean",
+    "clean-all": "run-script-os",
+    "clean-all:linux": "scripts/clean.sh --clean-all",
     "update-submodules": "git submodule update --init --recursive",
     "update-translations": "txjs-cli push src"
   },
