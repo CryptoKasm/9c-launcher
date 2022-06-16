@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from "react";
-import AccountStore from "../stores/account";
-import GameStore from "../stores/game";
-import StandaloneStore from "../stores/standaloneStore";
+import AccountStore from "../../renderer/stores/account";
+import GameStore from "../../renderer/stores/game";
+import StandaloneStore from "../../renderer/stores/standaloneStore";
 
 const stores = {
   account: new AccountStore(),
