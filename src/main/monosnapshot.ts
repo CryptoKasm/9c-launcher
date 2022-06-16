@@ -10,8 +10,9 @@ import * as utils from "../utils";
 import { DownloadSnapshotFailedError } from "./exceptions/download-snapshot-failed";
 import { DownloadSnapshotMetadataFailedError } from "./exceptions/download-snapshot-metadata-failed";
 import { ExtractSnapshotFailedError } from "./exceptions/extract-snapshot-failed";
-import { MixpanelInfo } from "./main";
 import { ClearCacheException } from "./exceptions/clear-cache-exception";
+import { INineChroniclesMixpanel } from "./mixpanel";
+import { get, REQUIRED_DISK_SPACE } from "../config";
 
 export async function downloadMetadata(
   basePath: string,
@@ -36,11 +37,17 @@ export async function downloadMetadata(
   }
 }
 
+/**
+ * Determines if we should download the snapshots.
+ * If this function retruns false, the headless will be launched immidiately.
+ */
 export function validateMetadata(
   localMetadata: BlockMetadata,
   snapshotMetadata: BlockMetadata
 ): boolean {
-  return snapshotMetadata.Index > localMetadata.Index;
+  return (
+    snapshotMetadata.Index > localMetadata.Index + get("SnapshotThreshold")
+  );
 }
 
 export async function downloadSnapshot(
@@ -96,8 +103,9 @@ export async function processSnapshot(
   userDataPath: string,
   standalone: Headless,
   win: Electron.BrowserWindow,
-  mixpanelInfo: MixpanelInfo,
-  token: CancellationToken
+  token: CancellationToken,
+  sizeCallback: (size: bigint) => void,
+  mixpanelInfo?: INineChroniclesMixpanel
 ): Promise<boolean> {
   console.log(`Trying snapshot path: ${snapshotDownloadUrl}`);
 
@@ -111,6 +119,7 @@ export async function processSnapshot(
   let needSnapshot =
     localMetadata === null || validateMetadata(localMetadata, snapshotMetadata);
   if (needSnapshot) {
+    await sizeCallback(REQUIRED_DISK_SPACE);
     let snapshotPath = await downloadSnapshot(
       snapshotDownloadUrl,
       (status) => {

@@ -35,9 +35,12 @@ const CreateAccountView = observer(
       if (
         error !== undefined ||
         privateKey === undefined ||
-        privateKey === "") {
+        privateKey === ""
+      ) {
         // FIXME: Show a new error page or retry page to complete the account creation.
-        console.error(`Failed to unprotect private key. ${error?.name}: ${error?.message}`);
+        console.error(
+          `Failed to unprotect private key. ${error?.name}: ${error?.message}`
+        );
         return;
       }
 
@@ -51,7 +54,10 @@ const CreateAccountView = observer(
     return (
       <div className={`create-account ${classes.root}`}>
         <Typography variant="h1" className={classes.info}>
-          <T _str="Please set the password to complete account creation." _tags="createAccount" />
+          <T
+            _str="Please set the password to complete account creation."
+            _tags="createAccount"
+          />
         </Typography>
         <RetypePasswordForm onSubmit={handleSubmit} useActivationKey={true} />
       </div>

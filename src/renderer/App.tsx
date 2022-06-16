@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import { Router } from "react-router";
 import { createBrowserHistory } from "history";
 import "./styles/common.scss";
@@ -15,7 +15,6 @@ import { Provider } from "mobx-react";
 import AccountStore from "./stores/account";
 import { IStoreContainer } from "../interfaces/store";
 import { RouterStore, syncHistoryWithStore } from "mobx-react-router";
-import { LOCAL_SERVER_URL } from "../config";
 import GameStore from "./stores/game";
 import Root from "./Root";
 import StandaloneStore from "./stores/standaloneStore";
@@ -26,35 +25,10 @@ import montserrat from "./styles/font";
 import { t } from "@transifex/native";
 import { ipcRenderer } from "electron";
 import { LocaleProvider } from "./i18n";
-
-const wsLink = new WebSocketLink({
-  uri: `ws://${LOCAL_SERVER_URL}/graphql`,
-  options: {
-    reconnect: true,
-  },
-});
-
-const httpLink = createHttpLink({ uri: `http://${LOCAL_SERVER_URL}/graphql` });
-
-const apiLink = split(
-  // split based on operation type
-  ({ query }) => {
-    const definition = getMainDefinition(query);
-    return (
-      definition.kind === "OperationDefinition" &&
-      definition.operation === "subscription"
-    );
-  },
-  wsLink,
-  httpLink
-);
-
-const link = ApolloLink.from([new RetryLink(), apiLink]);
-
-const client = new ApolloClient({
-  link: link,
-  cache: new InMemoryCache(),
-});
+import type { NodeInfo } from "../config";
+import RPCSpinner from "./components/RPCSpinner/RPCSpinner";
+import { PreloadEndedDocument, PreloadEndedQuery } from "src/generated/graphql";
+import { Update } from "src/main/update";
 
 const Store: IStoreContainer = {
   accountStore: new AccountStore(),
@@ -71,6 +45,7 @@ const history = syncHistoryWithStore(
 );
 
 function App() {
+  const [client, setClient] = useState<ApolloClient<any>>();
   const theme = useMemo(
     () =>
       createMuiTheme({
@@ -116,6 +91,72 @@ function App() {
     ipcRenderer.send("mixpanel-track-event", "Launcher/Start");
     listenOnlineStatus();
   }, []);
+
+  useEffect(() => {
+    async function main() {
+      if (!client) {
+        const node: NodeInfo = await ipcRenderer.invoke("get-node-info");
+        const headlessUrl = `${node.host}:${node.graphqlPort}`;
+        const wsLink = new WebSocketLink({
+          uri: `ws://${headlessUrl}/graphql`,
+          options: {
+            reconnect: true,
+            connectionCallback() {
+              client
+                .query<PreloadEndedQuery>({
+                  query: PreloadEndedDocument,
+                })
+                .then(({ data }) => {
+                  const apv = data!.nodeStatus.appProtocolVersion;
+                  if (!apv) return;
+                  ipcRenderer.send("encounter different version", {
+                    newer: apv.version,
+                    extras: apv.extra,
+                  } as Update);
+                });
+            },
+          },
+        });
+        const httpLink = createHttpLink({
+          uri: `http://${headlessUrl}/graphql`,
+        });
+
+        const apiLink = split(
+          // split based on operation type
+          ({ query }) => {
+            const definition = getMainDefinition(query);
+            return (
+              definition.kind === "OperationDefinition" &&
+              definition.operation === "subscription"
+            );
+          },
+          wsLink,
+          httpLink
+        );
+
+        const link = ApolloLink.from([new RetryLink(), apiLink]);
+
+        const client = new ApolloClient({
+          link: link,
+          cache: new InMemoryCache(),
+        });
+
+        setClient(client);
+      }
+    }
+    main();
+  }, [client]);
+
+  if (!client)
+    return (
+      <Provider {...Store}>
+        <ThemeProvider theme={theme}>
+          <LocaleProvider>
+            <RPCSpinner />
+          </LocaleProvider>
+        </ThemeProvider>
+      </Provider>
+    );
 
   return (
     <ApolloProvider client={client}>

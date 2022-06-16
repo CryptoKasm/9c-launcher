@@ -36,34 +36,33 @@ const PreloadProgressView = observer(() => {
   const [progressMessage, setProgressMessage] = useState<string | string[]>("");
   const [exceptionMessage, setExceptionMessage] = useState<string | null>(null);
 
-  const gotoErrorPage = (page: string) => {
+  const gotoErrorPage = (page: string, meta?: Record<string, any>) => {
     console.log(`Direct to error page: ${page}`);
     standaloneStore.setReady(false);
-    routerStore.push(`/error/${page}`);
+    routerStore.push(`/error/${page}`, meta);
   };
 
   const getCurrentStepStatusMessage = () => {
     if (!(0 < currentStep && currentStep <= statusMessage.length)) {
-      return "Failed to get message for current step";
+      return Array(2).fill("Initializing background process..");
     }
 
     return statusMessage[currentStep - 1];
   };
 
-  const completedMessage = useT("Preload Completed.", {
-    _tags: "preloadProgress",
-  });
-  const noPeerMessage = useT("No Peers Were Given.", {
-    _tags: "preloadProgress",
-  });
+  const t = useT();
 
   const makeProgressMessage = () => {
     if (preloadEnded) {
       return getConfig("PeerStrings").length > 0
-        ? completedMessage
-        : noPeerMessage;
+        ? t("Preload Completed.", {
+            _tags: "preloadProgress",
+          })
+        : t("No Peers Were Given.", {
+            _tags: "preloadProgress",
+          });
     } else {
-      return getCurrentStepStatusMessage().concat(
+      return getCurrentStepStatusMessage()[1].concat(
         ` ... (${currentStep}/${totalStep}) ${Math.floor(progress)}%`
       );
     }
@@ -72,8 +71,8 @@ const PreloadProgressView = observer(() => {
   useEffect(() => {
     ipcRenderer.on(
       "go to error page",
-      (event: IpcRendererEvent, arg: string) => {
-        gotoErrorPage(arg);
+      (event: IpcRendererEvent, arg: string, meta?: Record<string, any>) => {
+        gotoErrorPage(arg, meta);
       }
     );
 
@@ -136,9 +135,10 @@ const PreloadProgressView = observer(() => {
   }, []);
 
   useEffect(() => {
+    if (standaloneStore.Ready) return; // standalone ready implies the preload has been completed before, and we don't really need events after that
     ipcRenderer.send(
       "mixpanel-track-event",
-      `Launcher/${getCurrentStepStatusMessage()}`
+      `Launcher/${getCurrentStepStatusMessage()[0]}`
     );
   }, [currentStep]);
 
@@ -160,21 +160,23 @@ const PreloadProgressView = observer(() => {
         break;
       case 0x02:
         console.error("Chain is too low. Automatically relaunch.");
-        ipcRenderer.send("relaunch standalone");
+        ipcRenderer.send("relaunch standalone", { reason: "Tip is low." });
         break;
       case 0x03:
         console.error("Chain's tip is stale. Automatically relaunch.");
-        ipcRenderer.send("relaunch standalone");
+        ipcRenderer.send("relaunch standalone", { reason: "Tip is stale." });
         break;
       case 0x04:
         console.error(
           "Haven't received any messages for some time. Automatically relaunch."
         );
-        ipcRenderer.send("relaunch standalone");
+        ipcRenderer.send("relaunch standalone", {
+          reason: "Haven't received message.",
+        });
         break;
       case 0x05:
         console.error("Action Timeout. Automatically relaunch.");
-        ipcRenderer.send("relaunch standalone");
+        ipcRenderer.send("relaunch standalone", { reason: "Action Timeout." });
         break;
     }
   }, [nodeExceptionSubscriptionResult?.nodeException?.code]);
@@ -236,16 +238,16 @@ const PreloadProgressView = observer(() => {
 });
 
 const statusMessage = [
-  t("Validating Snapshot"),
-  t("Downloading Snapshot"),
-  t("Downloading State Snapshot"),
-  t("Extracting Snapshot"),
-  t("Starting Headless"),
-  t("Downloading Block Hashes"),
-  t("Downloading Blocks"),
-  t("Verifying Block Headers"),
-  t("Downloading States"),
-  t("Executing Actions"),
+  ["Validating Snapshot", t("Validating Snapshot")],
+  ["Downloading Snapshot", t("Downloading Snapshot")],
+  ["Downloading State Snapshot", t("Downloading State Snapshot")],
+  ["Extracting Snapshot", t("Extracting Snapshot")],
+  ["Starting Headless", t("Starting Headless")],
+  ["Downloading Block Hashes", t("Downloading Block Hashes")],
+  ["Downloading Blocks", t("Downloading Blocks")],
+  ["Verifying Block Headers", t("Verifying Block Headers")],
+  ["Downloading States", t("Downloading States")],
+  ["Executing Actions", t("Executing Actions")],
 ] as const;
 
 const getProgress = (

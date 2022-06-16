@@ -3,9 +3,9 @@ export interface IConfig {
   AppProtocolVersion: string;
   SnapshotPaths: string[];
   GenesisBlockPath: string;
-  MinimumDifficulty: number;
   StoreType: string;
   NoMiner: boolean;
+  SnapshotThreshold: number;
   TrustedAppProtocolVersionSigners: string[];
   IceServerStrings: string[];
   PeerStrings: string[];
@@ -18,10 +18,15 @@ export interface IConfig {
   Mixpanel: boolean;
   Sentry: boolean;
   MuteTeaser: boolean;
+  LogSizeBytes: number;
   AwsAccessKey: string | undefined;
   AwsSecretKey: string | undefined;
   AwsRegion: string | undefined;
   Network: string;
   SwapAddress: string | undefined;
   DataProviderUrl: string | undefined;
+  UseRemoteHeadless: boolean;
+  LaunchPlayer: boolean;
+  RemoteNodeList: string[];
+  UseV2Interface: boolean;
 }

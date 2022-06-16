@@ -36,6 +36,16 @@ jobs:
     outputs:
       apv: ${{ steps.make-apv.outputs.apv }}
 
+  # Validate integrity of all recursive submodules
+  check-submodules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          lfs: false
+      - run: scripts/check-submodules.sh
+
   # 론처 빌드
   build-launcher:
     needs: sign-apv
@@ -45,7 +55,6 @@ jobs:
       matrix:
         os:
           - macos-10.15
-          - windows-2019
     runs-on: ${{ matrix.os }}
     steps:
       # 클론
@@ -113,12 +122,8 @@ jobs:
       # 의존성 설치
       - run: yarn
       # 코드 스타일 린트
-      - run: npx pretty-quick --check --branch "${{ github.base_ref }}"
-      - name: Generate GraphQL types
-        run: yarn codegen
-      - name: Type Check
-        run: npx tsc --noEmit
-        if: github.event_name == 'pull_request'
+      - run: npx prettier --check "src/**/*.{ts,tsx,json}"
+        if: runner.os != 'Windows' # Windows uses CRLF line endings
       # 빌드
       - run: yarn build-prod
       # 이전 릴리스 버전으로부터 config.json 복사

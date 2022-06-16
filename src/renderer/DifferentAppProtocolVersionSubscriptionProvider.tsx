@@ -7,6 +7,7 @@ import {
 } from "../generated/graphql";
 import { IDownloadProgress } from "../interfaces/ipc";
 import UpdateView from "./views/update/UpdateView";
+import { Update } from "src/main/update";
 
 export const DifferentAppProtocolVersionSubscriptionProvider: React.FC = ({
   children,
@@ -92,14 +93,21 @@ export const DifferentAppProtocolVersionSubscriptionProvider: React.FC = ({
       null !== data?.differentAppProtocolVersionEncounter &&
       undefined !== data?.differentAppProtocolVersionEncounter
     ) {
-      ipcRenderer.send("encounter different version", data);
+      ipcRenderer.send("encounter different version", {
+        current: data.differentAppProtocolVersionEncounter.localVersion.version,
+        newer: data.differentAppProtocolVersionEncounter.peerVersion.version,
+        extras: data.differentAppProtocolVersionEncounter.peerVersion.extra,
+      } as Update);
     }
   }, [loading, data]);
 
-  return isDownload || isExtract || isCopying
-    ? (<UpdateView
+  return isDownload || isExtract || isCopying ? (
+    <UpdateView
       state={isDownload ? "download" : isExtract ? "extract" : "copy"}
       variant={variant}
-      progress={progress} />)
-    : (<>{children}</>);
+      progress={progress}
+    />
+  ) : (
+    <>{children}</>
+  );
 };

@@ -1,18 +1,20 @@
-import React from 'react';
-import { Story, Meta } from '@storybook/react';
+import React from "react";
+import { Story, Meta } from "@storybook/react";
 
-import LoadingDialog, { Props } from './LoadingDialog';
+import LoadingDialog, { Props } from "./LoadingDialog";
 
 export default {
-  title: 'Collection/ConfirmationDialog',
+  title: "Collection/ConfirmationDialog",
   component: LoadingDialog,
-  parameters: { actions: { argTypesRegex: '^on.*' } },
+  parameters: {
+    actions: { argTypesRegex: "^on.*" },
+    chromatic: { disableSnapshot: true },
+  },
 } as Meta;
 
 const Template: Story<Props> = (args) => <LoadingDialog {...args} />;
 
-
 export const Default = Template.bind({});
 Default.args = {
-  open: true
-}
+  open: true,
+};

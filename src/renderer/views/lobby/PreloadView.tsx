@@ -36,7 +36,7 @@ const PreloadView = observer((props: IStoreContainer) => {
   };
 
   const handleClickBlockExplorer = useCallback(() => {
-    shell.openExternal("https://explorer.libplanet.io/9c-main/");
+    shell.openExternal("https://9cscan.com/");
   }, []);
 
   const handleClickPlayerGuide = useCallback(() => {
@@ -49,21 +49,24 @@ const PreloadView = observer((props: IStoreContainer) => {
   const handleLaunch = useCallback(() => {
     const player = youtubeRef.current?.internalPlayer;
     if (player === undefined) throw Error("YouTube Player not found");
-    if (videoOpts.playerVars?.mute === 0) userConfigStore.set("MuteTeaser", true);
+    if (videoOpts.playerVars?.mute === 0)
+      userConfigStore.set("MuteTeaser", true);
     player.pauseVideo();
   }, [youtubeRef]);
 
-  const welcomeMessage = useT(
-    "Receiving data from other users.\nLet's watch the trailer and new content!",
-    { _tags: transifexTags }
-  );
+  const t = useT();
 
   return (
     <Container className={classes.root}>
       <Typography variant="h1" className={classes.title}>
-        {welcomeMessage.split("\n").map((v: string) => (
-          <p>{v}</p>
-        ))}
+        {t(
+          "Receiving data from other users.\nLet's watch the trailer and new content!",
+          { _tags: transifexTags }
+        )
+          .split("\n")
+          .map((v: string) => (
+            <p>{v}</p>
+          ))}
       </Typography>
       <YouTube videoId="Kf-7NXLVLOE" opts={videoOpts} ref={youtubeRef} />
       <List className={classes.links}>

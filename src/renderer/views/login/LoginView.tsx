@@ -22,6 +22,7 @@ import { observer, inject } from "mobx-react";
 
 import "../../styles/login/login.scss";
 import { useDecryptedPrivateKeyLazyQuery } from "../../../generated/graphql";
+import { get } from "../../../config";
 import { Select } from "../../components/Select";
 import ClearCacheButton from "../../components/ClearCacheButton";
 import { NineChroniclesLogo } from "../../components/NineChroniclesLogo";
@@ -61,10 +62,20 @@ const LoginView = observer(
     useEffect(() => {
       if (unprotectedPrivateKey !== undefined) {
         accountStore.setPrivateKey(unprotectedPrivateKey);
-        accountStore.toggleLogin();
+        accountStore.setLoginStatus(true);
         ipcRenderer.send("mixpanel-alias", accountStore.selectedAddress);
         ipcRenderer.send("mixpanel-track-event", "Launcher/Login");
-        routerStore.push("/login/mining");
+        if (get("UseRemoteHeadless")) {
+          routerStore.push("lobby/preload");
+          standaloneStore.setPrivateKeyEnded(true);
+          accountStore.setMiningConfigStatus(true);
+        } else {
+          routerStore.push("/login/mining");
+        }
+        ipcRenderer.send(
+          "standalone/set-signer-private-key",
+          accountStore.privateKey
+        );
       }
     }, [unprotectedPrivateKey]);
 
@@ -75,13 +86,24 @@ const LoginView = observer(
         accountStore.selectedAddress,
         event.target.password.value
       );
-      if (error !== undefined) {
+      if (
+        error !== undefined &&
+        error.toString().includes("The passphrase is wrong.")
+      ) {
         setInvalid(true);
         ipcRenderer.send("mixpanel-track-event", "Launcher/LoginFailed");
+      } else if (error !== undefined) {
+        // Unexpected Errors.
+        console.error(error);
+        standaloneStore.setReady(false);
+        routerStore.push("/error/reinstall");
       }
 
-      if (unprotectedPrivateKey !== undefined) {
-        setUnprotectedPrivateKey(unprotectedPrivateKey);
+      if (
+        unprotectedPrivateKey !== undefined &&
+        typeof unprotectedPrivateKey === "string"
+      ) {
+        setUnprotectedPrivateKey(unprotectedPrivateKey.padStart(64, "0"));
       }
     };
 
@@ -110,9 +132,9 @@ const LoginView = observer(
         <form onSubmit={handleSubmit}>
           <Grid container spacing={1}>
             <Grid item xs={12}>
-              <article className={classes.ID}>
+              <article className={classes.labelContainer}>
                 <InputLabel className={classes.label}>
-                  <T _str="ID" _tags={transifexTags}/>
+                  <T _str="ID" _tags={transifexTags} />
                   <IconButton
                     size="small"
                     component="span"
@@ -122,14 +144,14 @@ const LoginView = observer(
                   </IconButton>
                 </InputLabel>
                 <ClearCacheButton className={classes.cacheButton}>
-                  <T _str="CLEAR CACHE" _tags={transifexTags}/>
+                  <T _str="CLEAR CACHE" _tags={transifexTags} />
                 </ClearCacheButton>
               </article>
               <Popover
                 {...bindPopover(addressCopiedPopupState)}
                 {...popoverLayout}
               >
-                <T _str="Copied to clipboard!" _tags={transifexTags}/>
+                <T _str="Copied to clipboard!" _tags={transifexTags} />
               </Popover>
               <Select
                 items={accountStore.addresses}
@@ -138,9 +160,16 @@ const LoginView = observer(
               />
             </Grid>
             <Grid item xs={12}>
-              <InputLabel className={classes.label}>
-                <T _str="Password" _tags={transifexTags}/>
-              </InputLabel>
+              <article className={classes.labelContainer}>
+                <InputLabel className={classes.label}>
+                  <T _str="Password" _tags={transifexTags} />
+                </InputLabel>
+                <InputLabel error className={classes.label}>
+                  {isInvalid && (
+                    <T _str="Invalid password" _tags={transifexTags} />
+                  )}
+                </InputLabel>
+              </article>
               <FormControl fullWidth>
                 <OutlinedInput
                   type={showPassword ? "text" : "password"}
@@ -164,13 +193,13 @@ const LoginView = observer(
               variant="contained"
               color="primary"
             >
-              <T _str="Login" _tags={transifexTags}/>
+              <T _str="Login" _tags={transifexTags} />
             </Button>
             <TextButton
               className={classes.resetLink}
               onClick={handleResetPassword}
             >
-              <T _str="Forgot password?" _tags={transifexTags}/>
+              <T _str="Forgot password?" _tags={transifexTags} />
             </TextButton>
           </Box>
         </form>

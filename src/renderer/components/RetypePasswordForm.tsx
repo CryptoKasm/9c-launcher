@@ -118,7 +118,7 @@ const RetypePasswordForm = ({
   };
 
   const handleActivationKeyChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setActivationKey(e.target.value);
+    setActivationKey(e.target.value.trim());
     setActivationKeyAllowsEmpty(false);
   };
 
@@ -200,7 +200,7 @@ const RetypePasswordForm = ({
         className={classes.formControl}
       >
         <InputLabel className={classes.label}>
-          <T _str="Password (Confirm)" _tags={transifexTags}/>
+          <T _str="Password (Confirm)" _tags={transifexTags} />
         </InputLabel>
         <OutlinedInput
           id="password-confirm-input"
@@ -224,12 +224,9 @@ const RetypePasswordForm = ({
           className={classes.formControl}
         >
           <InputLabel className={classes.label}>
-            <T _str="Invitation Code" _tags={transifexTags}/>
+            <T _str="Invitation Code" _tags={transifexTags} />
           </InputLabel>
           <OutlinedInput type="text" onChange={handleActivationKeyChange} />
-          <FormHelperText className={classes.helperText}>
-            form helper text
-          </FormHelperText>
         </FormControl>
       )}
       <Button
@@ -239,7 +236,7 @@ const RetypePasswordForm = ({
         className={classes.submit}
         variant="contained"
       >
-        <T _str="Done" _tags={transifexTags}/>
+        <T _str="Done" _tags={transifexTags} />
       </Button>
     </form>
   );

@@ -1,7 +1,7 @@
 import { ChildProcess, execFileSync } from "child_process";
 import { ipcMain } from "electron";
-import { dirname, basename } from "path";
-import { userConfigStore, CUSTOM_SERVER, LOCAL_SERVER_URL } from "../../config";
+import { basename, dirname } from "path";
+import { CUSTOM_SERVER, LOCAL_SERVER_URL, userConfigStore } from "../../config";
 import { retry } from "@lifeomic/attempt";
 import { FetchError, HeadlessExitedError } from "../../errors";
 import { execute, sleep } from "../../utils";
@@ -11,8 +11,10 @@ import { BlockMetadata } from "src/interfaces/block-header";
 import { KeyStore } from "./key-store";
 import { Validation } from "./validation";
 import { Apv } from "./apv";
+import { Tx } from "./tx";
+import { Action } from "./action";
 
-const retryOptions = {
+export const retryOptions = {
   delay: 100,
   factor: 1.5,
   maxAttempts: 100,
@@ -27,7 +29,7 @@ interface NodeStatus {
   ExitCode: number | null;
 }
 
-const NODESTATUS: NodeStatus = {
+export const NODESTATUS: NodeStatus = {
   Node: null,
   QuitRequested: false,
   ExitCode: null,
@@ -43,23 +45,102 @@ class Headless {
     ipcMain.on(
       "standalone/set-private-key",
       async (event, privateKey: string) => {
-        let ret = await this.login(privateKey);
+        let ret = await this.login(privateKey).catch(() => false);
         console.log(`set-private-key: ${ret}`);
         event.returnValue = ret;
       }
     );
 
+    ipcMain.on(
+      "standalone/set-signer-private-key",
+      async (event, privateKey: string) => {
+        let ret = await this.setSignerPrivateKey(privateKey).catch(() => false);
+        console.log(`set-signer-private-key: ${ret}`);
+        event.returnValue = ret;
+      }
+    );
+
     ipcMain.on("standalone/set-mining", async (event, mining: boolean) => {
-      let ret = await this.miningOption(mining);
+      let ret = await this.miningOption(mining).catch(() => false);
       console.log(`set-mining: ${ret}`);
       event.returnValue = ret;
     });
+
+    ipcMain.on(
+      "activate-account",
+      async (event, activationKey: string, nonce: string, filePath: string) => {
+        console.log("activate-account");
+        event.returnValue = this.action.ActivateAccount(
+          activationKey,
+          nonce,
+          filePath
+        );
+      }
+    );
+
+    ipcMain.on(
+      "monster-collect",
+      async (event, level: number, filePath: string) => {
+        console.log("monster-collect");
+        event.returnValue = this.action.MonsterCollect(level, filePath);
+      }
+    );
+
+    ipcMain.on(
+      "claim-monster-collection-reward",
+      async (event, avatarAddress: string, filePath: string) => {
+        console.log("claim-monster-collection-reward");
+        event.returnValue = this.action.ClaimMonsterCollectionReward(
+          avatarAddress,
+          filePath
+        );
+      }
+    );
+
+    ipcMain.on(
+      "transfer-asset",
+      async (
+        event,
+        sender: string,
+        recipient: string,
+        amount: number,
+        memo: string,
+        filePath: string
+      ) => {
+        console.log("transfer-asset");
+        event.returnValue = this.action.TransferAsset(
+          sender,
+          recipient,
+          amount,
+          memo,
+          filePath
+        );
+      }
+    );
+
+    ipcMain.on(
+      "sign-tx",
+      async (event, nonce: number, timeStamp: string, filePath: string) => {
+        console.log("sign-tx");
+        if (this._signerPrivateKey == undefined || "") {
+          throw new Error("set signer private key first.");
+        }
+        event.returnValue = this.tx.Sign(
+          this._signerPrivateKey,
+          nonce,
+          "4582250d0da33b06779a8475d283d5dd210c683b9b999d74d03fac4f58fa6bce",
+          timeStamp,
+          filePath
+        );
+      }
+    );
   }
 
   private _path: string;
   private _running: boolean;
   private _privateKey: string | undefined;
   private _mining: boolean | undefined;
+  private _signerPrivateKey: string | undefined;
 
   // execute-kill
   public get alive(): boolean {
@@ -85,7 +166,7 @@ class Headless {
       console.log("Connecting to the custom headless server...");
       console.log(
         "If the connection is not successful, check if the headless server " +
-        `is executed with the following options:${argsString}`
+          `is executed with the following options:${argsString}`
       );
     } else {
       console.log(
@@ -162,6 +243,11 @@ class Headless {
     return true;
   }
 
+  public async setSignerPrivateKey(privateKey: string): Promise<boolean> {
+    this._signerPrivateKey = privateKey;
+    return true;
+  }
+
   public get keyStore(): KeyStore {
     return new KeyStore(this._path);
   }
@@ -172,6 +258,14 @@ class Headless {
 
   public get apv(): Apv {
     return new Apv(this._path);
+  }
+
+  public get tx(): Tx {
+    return new Tx(this._path);
+  }
+
+  public get action(): Action {
+    return new Action(this._path);
   }
 
   public getTip(storeType: string, storePath: string): BlockMetadata | null {
@@ -243,7 +337,8 @@ class Headless {
 
         if (await this.needRetry(response)) {
           console.log(
-            `Failed to fetch standalone (${addr}). Retrying... ${context.attemptNum
+            `Failed to fetch standalone (${addr}). Retrying... ${
+              context.attemptNum
             }/${context.attemptsRemaining + context.attemptNum}`
           );
           throw new Error("Retry required.");
@@ -273,6 +368,8 @@ class Headless {
       return false;
     } else if (response.status === 503) {
       throw new FetchError(await response.text(), 503);
+    } else if (response.status === 400) {
+      throw new FetchError(await response.text(), 400);
     }
 
     // Excluding 200 & 503, retry.

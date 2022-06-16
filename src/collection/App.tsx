@@ -4,44 +4,23 @@ import { split, ApolloLink } from "apollo-link";
 import { createHttpLink } from "apollo-link-http";
 import { RetryLink } from "apollo-link-retry";
 import { WebSocketLink } from "apollo-link-ws";
-import React, { useState } from "react";
-import { LOCAL_SERVER_URL } from "../config";
-import './App.scss';
+import React, { useEffect, useState } from "react";
+import "./App.scss";
 import { getMainDefinition } from "apollo-utilities";
-import Main from "./pages/main/main";
 import { ApolloProvider } from "react-apollo";
 import IntroFacade from "./pages/facade/IntroFacade";
 import path from "path";
-
-
-const wsLink = new WebSocketLink({
-  uri: `ws://${LOCAL_SERVER_URL}/graphql`,
-  options: {
-    reconnect: true,
-  },
-});
-
-const httpLink = createHttpLink({ uri: `http://${LOCAL_SERVER_URL}/graphql` });
-
-const apiLink = split(
-  // split based on operation type
-  ({ query }) => {
-    const definition = getMainDefinition(query);
-    return (
-      definition.kind === "OperationDefinition" &&
-      definition.operation === "subscription"
-    );
-  },
-  wsLink,
-  httpLink
-);
+import { ipcRenderer } from "electron";
 
 function getIsFileExsist() {
-  var remote = require('electron').remote;
-  var electronFs = remote.require('fs');
-  const filePath = path.join(remote.app.getAppPath(), "monster-collection-intro");
-  console.log(`path: ${filePath}`)
-  if(electronFs.existsSync(filePath)) {
+  var remote = require("electron").remote;
+  var electronFs = remote.require("fs");
+  const filePath = path.join(
+    remote.app.getAppPath(),
+    "monster-collection-intro"
+  );
+  console.log(`path: ${filePath}`);
+  if (electronFs.existsSync(filePath)) {
     return true;
   } else {
     return false;
@@ -49,27 +28,77 @@ function getIsFileExsist() {
 }
 
 function createFile() {
-  var remote = require('electron').remote;
-  var electronFs = remote.require('fs');
-  const filePath = path.join(remote.app.getAppPath(), "monster-collection-intro");
-  electronFs.openSync(filePath, 'w');
+  var remote = require("electron").remote;
+  var electronFs = remote.require("fs");
+  const filePath = path.join(
+    remote.app.getAppPath(),
+    "monster-collection-intro"
+  );
+  electronFs.openSync(filePath, "w");
 }
 
 const isFileExsist = getIsFileExsist();
 
-const link = ApolloLink.from([new RetryLink(), apiLink]);
-
-const client = new ApolloClient({
-  link: link,
-  cache: new InMemoryCache(),
-});
-
 const App: React.FC = () => {
+  const [agentAddress, setAgentAddress] = useState<string>("");
+  const [client, setClient] = useState<ApolloClient<any>>();
+
+  useEffect(() => {
+    ipcRenderer.on(
+      "initialize collection window",
+      (_, address, headlessUrl) => {
+        console.log(
+          `initialize collection window Main.tsx. address: ${address}, node: ${headlessUrl}`
+        );
+        setAgentAddress(address);
+
+        const wsLink = new WebSocketLink({
+          uri: `ws://${headlessUrl}/graphql`,
+          options: {
+            reconnect: true,
+          },
+        });
+
+        const httpLink = createHttpLink({
+          uri: `http://${headlessUrl}/graphql`,
+        });
+
+        const apiLink = split(
+          // split based on operation type
+          ({ query }) => {
+            const definition = getMainDefinition(query);
+            return (
+              definition.kind === "OperationDefinition" &&
+              definition.operation === "subscription"
+            );
+          },
+          wsLink,
+          httpLink
+        );
+
+        const link = ApolloLink.from([new RetryLink(), apiLink]);
+
+        const client = new ApolloClient({
+          link: link,
+          cache: new InMemoryCache(),
+        });
+
+        setClient(client);
+      }
+    );
+  }, [agentAddress, client]);
+
+  if (!client) return null;
+
   return (
-  <ApolloProvider client={client}>
-    <IntroFacade isFirst={isFileExsist} onCreateFile={createFile} />
+    <ApolloProvider client={client}>
+      <IntroFacade
+        isFirst={isFileExsist}
+        onCreateFile={createFile}
+        agentAddress={agentAddress}
+      />
     </ApolloProvider>
-  )
+  );
 };
 
 export default App;

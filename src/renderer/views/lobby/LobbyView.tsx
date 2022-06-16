@@ -8,15 +8,17 @@ import {
 } from "@material-ui/core";
 import { inject, observer } from "mobx-react";
 import React, {
-  useState,
-  useEffect,
-  useCallback,
   ChangeEvent,
   FormEvent,
+  useCallback,
+  useEffect,
+  useState,
 } from "react";
 import {
-  useActivateMutation,
-  useActivationLazyQuery,
+  useActivationAddressLazyQuery,
+  useActivationKeyNonceQuery,
+  useGetNextTxNonceQuery,
+  useStageTxMutation,
 } from "../../../generated/graphql";
 import { IStoreContainer } from "../../../interfaces/store";
 import { sleep } from "../../../utils";
@@ -25,6 +27,8 @@ import { ipcRenderer } from "electron";
 import { T } from "@transifex/react";
 
 import lobbyViewStyle from "./LobbyView.style";
+import { tmpName } from "tmp-promise";
+import { get } from "../../../config";
 
 interface ILobbyViewProps extends IStoreContainer {
   onLaunch: () => void;
@@ -41,87 +45,155 @@ const LobbyView = observer((props: ILobbyViewProps) => {
   const { accountStore, standaloneStore } = props;
   const [
     activation,
-    { loading, error: statusError, data: status, refetch: activationRefetch },
-  ] = useActivationLazyQuery();
-  const [
-    activate,
-    { data: isActivated, error: activatedError },
-  ] = useActivateMutation();
+    { loading, data: status, refetch: activationRefetch },
+  ] = useActivationAddressLazyQuery({
+    variables: {
+      address: accountStore.selectedAddress,
+    },
+  });
   const [activationKey, setActivationKey] = useState(
     accountStore.activationKey
   );
   const [polling, setPollingState] = useState(false);
-  const [hasAutoActivateBegin, setHasAutoActivateBegin] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [tx, setTx] = useState("");
 
   const handleActivationKeyChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
-      setActivationKey(event.target.value);
+      setActivationKey(event.target.value.trim());
     },
     [event]
   );
+
+  const { refetch: nonceRefetch } = useActivationKeyNonceQuery({
+    variables: {
+      encodedActivationKey: activationKey,
+    },
+  });
+
+  const { refetch: txNoceRefetch } = useGetNextTxNonceQuery({
+    variables: {
+      address: accountStore.selectedAddress,
+    },
+  });
+
+  const [stage] = useStageTxMutation();
 
   const handleActivationKeySubmit = async (
     event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
-    await activateMutation();
+    await makeTx();
   };
 
-  const activateMutation = async () => {
-    setPollingState(true);
-
-    const activated = async () => {
-      const result = await activationRefetch();
-      return result.data.activationStatus.activated;
-    };
-
-    if (await activated()) {
-      setPollingState(false);
+  const stageTx = async () => {
+    if (tx === "") {
       return;
     }
 
-    const activateResult = await activate({
+    setPollingState(true);
+    const stageResult = await stage({
       variables: {
-        encodedActivationKey: activationKey,
+        encodedTx: tx,
       },
     });
 
-    if (!activateResult.data?.activationStatus?.activateAccount) {
-      setPollingState(false);
-      return;
-    }
-
-    while (true) {
-      await sleep(1000);
-      if (await activated()) {
-        setPollingState(false);
-        return;
+    if (stageResult.data?.stageTx) {
+      while (true) {
+        await sleep(1000);
+        if (await activated()) {
+          setPollingState(false);
+          return;
+        }
       }
     }
   };
 
+  const makeTx = async () => {
+    // get key nonce.
+    setTx("");
+    setErrorMsg("");
+    setPollingState(true);
+    const ended = async () => {
+      return await nonceRefetch();
+    };
+    let nonce;
+    try {
+      let res = await ended();
+      nonce = res.data.activationKeyNonce;
+    } catch (e) {
+      setErrorMsg(e.message);
+      setPollingState(false);
+      return;
+    }
+
+    // create action.
+    const fileName = await tmpName();
+    if (
+      !ipcRenderer.sendSync("activate-account", activationKey, nonce, fileName)
+    ) {
+      setPollingState(false);
+      setErrorMsg("create activate account action failed.");
+      return;
+    }
+
+    // get tx nonce.
+    const ended2 = async () => {
+      return await txNoceRefetch({ address: accountStore.selectedAddress });
+    };
+    let txNonce;
+    try {
+      let res = await ended2();
+      txNonce = res.data.transaction.nextTxNonce;
+    } catch (e) {
+      setErrorMsg(e.message);
+      setPollingState(false);
+      return;
+    }
+
+    // sign tx.
+    const result = ipcRenderer.sendSync(
+      "sign-tx",
+      txNonce,
+      new Date().toISOString(),
+      fileName
+    );
+    if (result.stderr != "") {
+      setErrorMsg(result.stderr);
+    }
+    if (result.stdout != "") {
+      setTx(result.stdout);
+    }
+    setPollingState(false);
+    return;
+  };
+
+  const activated = async () => {
+    const result = await activationRefetch();
+    return result.data.activationStatus.addressActivated;
+  };
+
   useEffect(() => {
-    if (standaloneStore.Ready && standaloneStore.IsSetPrivateKeyEnded) {
+    if (standaloneStore.Ready) {
       activation();
     }
-  }, [standaloneStore.Ready, standaloneStore.IsSetPrivateKeyEnded]);
+  }, [standaloneStore.Ready]);
 
-  if (
-    !loading &&
-    !polling &&
-    !status?.activationStatus.activated &&
-    activationKey !== "" &&
-    !hasAutoActivateBegin &&
-    activationRefetch !== undefined
-  ) {
-    // FIXME 플래그(hasAutoActivateBegin) 없이 useEffect 나 타이밍 잡아서 부르게끔 고쳐야 합니다.
-    setHasAutoActivateBegin(true);
-    activateMutation();
-  }
+  useEffect(() => {
+    if (activationKey !== "") {
+      makeTx();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!polling && tx !== "" && !status?.activationStatus.addressActivated) {
+      stageTx();
+    }
+  }, [polling, tx, status]);
 
   let child: JSX.Element;
   // FIXME 활성화에 실패한 경우에도 polling이 풀리지 않는 문제가 있습니다.
-  if ((loading || polling) && activatedError === undefined) {
+  if (loading || polling) {
     child = (
       <div>
         <p className={classes.verifing}>
@@ -132,26 +204,21 @@ const LobbyView = observer((props: ILobbyViewProps) => {
     );
   } else if (!standaloneStore.Ready) {
     child = <PreloadWaitingButton />;
-  } else if (status?.activationStatus.activated) {
+  } else if (status?.activationStatus.addressActivated) {
     child = <GameStartButton {...props} />;
   } else {
     child = (
       <form onSubmit={handleActivationKeySubmit}>
         <TextField
-          error={activatedError?.message !== undefined}
+          error={errorMsg !== ""}
           label={<T _str="Invitation Code" _tags={transifexTags} />}
           onChange={handleActivationKeyChange}
           fullWidth
         />
-        {activatedError?.message !== undefined && (
+        {errorMsg !== "" && (
           <FormHelperText>
             {/* FIXME 예외 타입으로 구분해서 메시지 국제화 할 것 */}
-            {activatedError?.message
-              ?.split("\n")
-              ?.shift()
-              ?.split(":")
-              ?.pop()
-              ?.trim()}
+            {errorMsg?.split("\n")?.shift()?.split(":")?.pop()?.trim()}
           </FormHelperText>
         )}
         <ButtonOrigin
@@ -178,7 +245,7 @@ const PreloadWaitingButton = () => {
 
 const GameStartButton = observer((props: ILobbyViewProps) => {
   const { accountStore, gameStore, standaloneStore } = props;
-  const [shouldAutostart, setShouldAutostart] = useState(true);
+  const [shouldAutostart, setShouldAutostart] = useState(get("LaunchPlayer"));
   const classes = lobbyViewStyle();
   const handleStartGame = () => {
     ipcRenderer.send("mixpanel-track-event", "Launcher/Unity Player Start");

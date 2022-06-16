@@ -17,13 +17,18 @@ import {
 } from "@material-ui/core";
 import { FolderOpen, Close } from "@material-ui/icons";
 import useStores from "../../../hooks/useStores";
-import { userConfigStore, get as getConfig, blockchainStoreDirParent } from "../../../config";
+import {
+  userConfigStore,
+  get as getConfig,
+  blockchainStoreDirParent,
+} from "../../../config";
 import { SettingsFormEvent } from "../../../interfaces/event";
 import configurationViewStyle from "./ConfigurationView.style";
 import { T, useLanguages, useLocale } from "@transifex/react";
 import { Select } from "../../components/Select";
 import ClearCacheButton from "../../components/ClearCacheButton";
 import log from "electron-log";
+import bytes from "bytes";
 
 const transifexTags = "configuration";
 
@@ -60,6 +65,16 @@ const ConfigurationView = observer(() => {
 
     const isEnableSentry = event.target.sentry.checked;
     userConfigStore.set("Sentry", isEnableSentry);
+
+    const useRemoteHeadlessChecked = event.target.useRemoteHeadless.checked;
+    userConfigStore.set("UseRemoteHeadless", useRemoteHeadlessChecked);
+
+    const useV2Checked = event.target.v2.checked;
+    userConfigStore.set("UseV2Interface", useV2Checked);
+
+    const logSize = bytes.parse(event.target.logsize.value);
+    if (logSize && logSize !== getConfig("LogSizeBytes"))
+      userConfigStore.set("LogSizeBytes", logSize);
 
     remote.app.relaunch();
     remote.app.exit();
@@ -161,6 +176,16 @@ const ConfigurationView = observer(() => {
             <T _str="Open Path" _tags={transifexTags} />
           </Button>
 
+          <FormLabel className={classes.newLine}>
+            <T _str="Log Size" _tags={transifexTags} />
+          </FormLabel>
+          <TextField
+            fullWidth
+            name="logsize"
+            className={classes.textField}
+            defaultValue={bytes(getConfig("LogSizeBytes"))}
+          />
+
           <FormControl className={classes.checkboxGroup}>
             <FormLabel className={classes.newLine}>
               <T _str="Send Information" _tags={transifexTags} />
@@ -195,6 +220,43 @@ const ConfigurationView = observer(() => {
                 _tags={transifexTags}
               />
             </FormHelperText>
+          </FormControl>
+
+          <FormControl className={classes.checkboxGroup}>
+            <FormLabel className={classes.newLine}>
+              <T _str="Connection" _tags={transifexTags} />
+            </FormLabel>
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    className={classes.checkbox}
+                    defaultChecked={getConfig("UseRemoteHeadless")}
+                    color="default"
+                    name="useRemoteHeadless"
+                  />
+                }
+                label={<T _str="Use Remote Headless" _tags={transifexTags} />}
+              />
+            </FormGroup>
+          </FormControl>
+          <FormControl className={classes.checkboxGroup}>
+            <FormLabel className={classes.newLine}>
+              <T _str="Experimental" _tags={transifexTags} />
+            </FormLabel>
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    className={classes.checkbox}
+                    defaultChecked={getConfig("UseV2Interface")}
+                    color="default"
+                    name="v2"
+                  />
+                }
+                label={<T _str="Use V2 Interface" _tags={transifexTags} />}
+              />
+            </FormGroup>
           </FormControl>
         </article>
         <Button

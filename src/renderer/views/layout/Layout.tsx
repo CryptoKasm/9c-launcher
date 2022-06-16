@@ -4,18 +4,18 @@ import Button from "@material-ui/core/Button";
 import DiscordIcon from "../../components/DiscordIcon";
 import SettingsIcon from "@material-ui/icons/Settings";
 import "../../styles/layout/layout.scss";
-import { useTopmostBlocksQuery } from "../../../generated/graphql";
 import useStores from "../../../hooks/useStores";
 import { observer } from "mobx-react";
 
 import { T } from "@transifex/react";
-import { get as getConfig } from "../../../config";
+import { get as getConfig, NodeInfo } from "../../../config";
 import AccountInfoContainer from "../../components/AccountInfo/AccountInfoContainer";
 import InfoIcon from "../../components/InfoIcon";
 
 import explorerLogo from "../../resources/block-explorer-logo.png";
 import patchNoteLogo from "../../resources/wrench.png";
 import NCGLogo from "../../resources/ncgLogo.png";
+import { useTipSubscription } from "../../../generated/graphql";
 
 const transifexTags = "menu";
 
@@ -23,20 +23,32 @@ export const Layout: React.FC = observer(({ children }) => {
   const { accountStore, routerStore, standaloneStore } = useStores();
   const [awsSinkCloudwatchGuid, setAwsSinkCloudwatchGuid] = useState<string>();
   const [infoButtonState, setInfoButtonState] = useState(false);
+  const [tip, setTip] = useState<number>(0);
+  const [node, setNode] = useState<string>("loading...");
 
-  const topmostBlocksResult = useTopmostBlocksQuery();
-  topmostBlocksResult.startPolling(1000 * 10); // 10 seconds
-  const topmostBlocks = topmostBlocksResult.data?.nodeStatus.topmostBlocks;
-  const minedBlocks =
-    accountStore.isLogin && topmostBlocks != null
-      ? topmostBlocks.filter((b) => b?.miner == accountStore.selectedAddress)
-      : null;
+  const { data: blockTip } = useTipSubscription();
+
   useEffect(() => {
     const awsSinkGuid: string = ipcRenderer.sendSync(
       "get-aws-sink-cloudwatch-guid"
     );
     setAwsSinkCloudwatchGuid(awsSinkGuid);
   }, []);
+
+  useEffect(() => {
+    async function main() {
+      if (!tip) {
+        const nodeInfo: NodeInfo = await ipcRenderer.invoke("get-node-info");
+        setNode(nodeInfo.host);
+      }
+    }
+    main();
+  }, [tip]);
+
+  useEffect(() => {
+    const index = blockTip?.tipChanged?.index || 0;
+    setTip(index);
+  }, [blockTip]);
 
   function handleInfoClick() {
     const clipboardElement = (document.getElementById(
@@ -45,9 +57,7 @@ export const Layout: React.FC = observer(({ children }) => {
     const stringValue = `
       APV: ${getConfig("AppProtocolVersion") as string} 
       Address: ${accountStore.selectedAddress} 
-      Debug: ${accountStore.isLogin} / ${topmostBlocksResult.loading}
-      Mined blocks: ${minedBlocks?.length} (out of recent ${topmostBlocks?.length
-      } blocks)
+      Debug: ${accountStore.isLogin}
       ${awsSinkCloudwatchGuid !== null && `Client ID: ${awsSinkCloudwatchGuid}`}
     `;
     clipboardElement.value = stringValue;
@@ -67,20 +77,36 @@ export const Layout: React.FC = observer(({ children }) => {
       <main>{children}</main>
       <nav className="hero">
         <AccountInfoContainer
-          minedBlock={Number(minedBlocks?.length)}
-          onReward={() => { }}
+          onReward={() => {}}
           onOpenWindow={() => {
-            ipcRenderer.invoke("open collection page");
+            ipcRenderer.invoke(
+              "open collection page",
+              accountStore.selectedAddress
+            );
           }}
         />
+        <div className="LauncherLayoutVersion">
+          block: {tip > 0 ? `#${tip}` : "loading.."}
+          <br />
+          {`version: v${
+            (getConfig("AppProtocolVersion") as string).split("/")[0]
+          }`}
+          <br />
+          node: {node}
+        </div>
         <ul className={"LauncherClientOption"}>
           <li>
             <Button
               startIcon={<img src={NCGLogo} />}
               onClick={() => {
-                ipcRenderer.invoke("open transfer page");
+                ipcRenderer.invoke(
+                  "open transfer page",
+                  accountStore.selectedAddress
+                );
               }}
-              disabled={!accountStore.isMiningConfigEnded || !standaloneStore.Ready}
+              disabled={
+                !accountStore.isMiningConfigEnded || !standaloneStore.Ready
+              }
             >
               <T _str="Send NCG" _tags={transifexTags} />
             </Button>
@@ -101,7 +127,7 @@ export const Layout: React.FC = observer(({ children }) => {
             <Button
               startIcon={<img src={explorerLogo} />}
               onClick={() => {
-                shell.openExternal("http://explorer.libplanet.io/9c-main/");
+                shell.openExternal("https://9cscan.com");
               }}
             >
               <T _str="Explorer" _tags={transifexTags} />
@@ -130,8 +156,6 @@ export const Layout: React.FC = observer(({ children }) => {
             </Button>
           </li>
         </ul>
-        <div className="LauncherLayoutVersion">{`v${(getConfig("AppProtocolVersion") as string).split("/")[0]
-          }`}</div>
         <div
           id={"LauncherClientIcon"}
           className={`LauncherClientIcon ${infoButtonState ? "activate" : ""}`}
